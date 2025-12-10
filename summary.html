@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Summary</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* Extra styling for report-style */
+body { line-height: 1.6; }
+.main-nav { margin-bottom: 24px; }
+.toc {
+    border: 2px solid var(--accent);
+    padding: 12px;
+    margin-bottom: 24px;
+    border-radius: 8px;
+    background: var(--bg);
+}
+h2 { margin-top: 32px; color: var(--accent); }
+p img { display: block; max-width: 600px; margin: 12px 0; }
+code { background:#fff3; padding:2px 6px; border-radius:4px; }
+pre.rule { background:#f6f9ff; padding:12px; border-radius:6px; overflow:auto; }
+</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <h1>Summary</h1>
+  </div>
+</header>
+
+<nav class="main-nav wrap">
+  <a href="index.html">Home</a>
+  <a href="pfsense.html">pfSense</a>
+  <a href="windows.html">Windows Server</a>
+  <a href="linux.html">Linux Server</a>
+  <a href="wazuh.html">Wazuh</a>
+  <a href="security.html">Security Testing</a>
+  <a href="vpn.html">OpenVPN</a>
+  <a href="advanced.html" >Advanced testing</a>
+  <a href="backups.html">Backup & Restore</a>
+  <a href="summary.html" class="active">Summary</a>
+</nav>
+
+<main class="wrap">
+<h2>Summary</h2>
+<p>
+This project successfully delivered a fully functional, multi-service network environment integrating firewall security, intrusion detection, virtualization, directory services, endpoint monitoring, and centralized log analysis. 
+The environment included a pfSense 2.8.1 firewall, a Windows Server Domain Controller, a Linux Server, a Suricata IDS deployment, and a complete Wazuh SIEM stack. 
+All components were configured to operate together as a secure, monitored, and documented infrastructure.
+</p>
+Across the practical tasks, the network was segmented into WAN, LAN1, LAN2, and DMZ-equivalent zones, each with dedicated services and firewall policies. 
+Active Directory authentication, web hosting (IIS + Apache), DHCP, DNS, and SSH services were deployed and validated. 
+Wazuh agents were installed on all hosts and successfully forwarded logs, alerts, and security events to the Wazuh Manager for real-time monitoring.
+<p>
+Security layers were strengthened through Suricata rulesets (ETOpen), IDS alert generation, brute-force detection, port scanning analysis, and detailed correlation of events across Wazuh SIEM dashboards. 
+WAN-to-LAN port forwarding was implemented securely using NAT + firewall rules to expose internal services while maintaining strict access control. 
+Web filtering for LAN2 was enforced using Squid/SquidGuard (or DNS alias filtering), blocking social media sites during controlled schedules, with logs confirming the applied restrictions.
+
+</p>
+The final network demonstrates strong security hardening, layered monitoring, controlled attack simulation, and proper documentation of each configuration and validation step. 
+All required evidence—packet captures, IDS alerts, Wazuh logs, firewall rules, screenshots, and test results—were collected and organized according to project specifications.
+<p>
+
+
+</p>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">© CNET-F25 — Sezerano Beni — 28852</div>
+</footer>
+
+<!-- Return to Top Button -->
+<button id="topBtn" title="Go to top">↑ Top</button>
+
+<script>
+let topButton = document.getElementById("topBtn");
+window.onscroll = function(){scrollFunction()};
+function scrollFunction(){
+  if(document.body.scrollTop>200 || document.documentElement.scrollTop>200) topButton.style.display="block";
+  else topButton.style.display="none";
+}
+topButton.onclick = function(){ window.scrollTo({ top:0, behavior:'smooth' }); };
+</script>
+</body>
+</html>

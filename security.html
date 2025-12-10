@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IDS (Suricata) Integration & security testing</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* Extra styling for report-style */
+body { line-height: 1.6; }
+.main-nav { margin-bottom: 24px; }
+.toc {
+    border: 2px solid var(--accent);
+    padding: 12px;
+    margin-bottom: 24px;
+    border-radius: 8px;
+    background: var(--bg);
+}
+h2 { margin-top: 32px; color: var(--accent); }
+p img { display: block; max-width: 600px; margin: 12px 0; }
+code { background:#fff3; padding:2px 6px; border-radius:4px; }
+pre.rule { background:#f6f9ff; padding:12px; border-radius:6px; overflow:auto; }
+</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <h1>Task 5 & 6 — IDS (Suricata) Integration & security testing</h1>
+  </div>
+</header>
+
+<nav class="main-nav wrap">
+  <a href="index.html">Home</a>
+  <a href="pfsense.html">pfSense</a>
+  <a href="windows.html">Windows Server</a>
+  <a href="linux.html">Linux Server</a>
+  <a href="wazuh.html">Wazuh</a>
+  <a href="security.html" class="active">Security Testing</a>
+  <a href="vpn.html">OpenVPN</a>
+  <a href="advanced.html">Advanced testing</a>
+  <a href="backups.html">Backup & Restore</a>
+  <a href="summary.html">Summary</a>
+</nav>
+
+<main class="wrap">
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <ul>
+      <li><a href="#overview">Overview & Goals</a></li>
+      <li><a href="#install">Installing Suricata (Ubuntu / pfSense)</a></li>
+      <li><a href="#rules">Rules configuration (community + local)</a></li>
+      <li><a href="#integration">Integrating Suricata with Wazuh (EVE JSON)</a></li>
+      <li><a href="#tests">Testing: nmap & controlled tests</a></li>
+      <li><a href="#kalipentest">Scan detection with Kali Linux</a></li>
+      <li><a href="#evidenvces">Evidences</a></li>
+      <li><a href="#tuning">Tuning & recommendations</a></li>
+    </ul>
+  </div>
+
+  <h2 id="overview">Overview & Goals</h2>
+  <p>
+    Suricata provides network IDS/IPS capabilities. In this lab I installed Suricata, added community rules (Emerging Threats), wrote a few local rules for scan/DoS detection, enabled EVE JSON logging and fed those logs to Wazuh for correlation and alerting.
+  </p>
+
+  <h2 id="install">Installing Suricata (Ubuntu) — summary of steps</h2>
+  <p>
+    On the Ubuntu host used for IDS (or pfSense if using the package), the installation steps used were:
+    <pre class="rule">
+sudo add-apt-repository ppa:oisf/suricata-stable
+sudo apt-get update
+sudo apt-get install suricata -y
+    </pre>
+    Then downloaded community ET rules (example snippet used for 6.0.8):
+    <pre class="rule">
+cd /tmp && curl -LO https://rules.emergingthreats.net/open/suricata6.0.8/emerging.rules.tar.gz
+tar -xvzf emerging.rules.tar.gz
+sudo mkdir -p /etc/suricata/rules
+sudo mv rules/*.rules /etc/suricata/rules/
+sudo chmod 640 /etc/suricata/rules/*.rules
+    </pre>
+  </p>
+
+  <h2 id="rules">Rules configuration (community + local)</h2>
+  <p>
+    In <code>/etc/suricata/suricata.yaml</code> ensure <code>rule-files</code> points to your rules directory and includes <code>local.rules</code>:
+    <pre class="rule">
+rule-files:
+ - "emerging.rules"
+ - "local.rules"
+    </pre>
+    Examples of local rules I used (saved in <code>/etc/suricata/rules/local.rules</code>):
+    <pre class="rule">
+# local.rules - sample lab rules
+alert tcp any any -> any any (msg:"[CUSTOM] Nmap SYN Scan Detected"; flags:S; threshold:type both, track by_src, count 10, seconds 30; sid:1000001; rev:1;)
+alert icmp any any -> any any (msg:"[CUSTOM] ICMP Flood Detected"; itype:8; threshold:type both, track by_src, count 100, seconds 10; sid:1000002; rev:1;)
+alert tcp any any -> any any (msg:"[CUSTOM] TCP SYN Flood Detected"; flags:S; threshold:type threshold, track by_src, count 50, seconds 10; sid:1000003; rev:1;)
+    </pre>
+    After editing rules restart Suricata:
+    <pre class="rule">sudo systemctl restart suricata</pre>
+  </p>
+
+  <h2 id="integration">Integrating Suricata with Wazuh (EVE JSON)</h2>
+  <p>
+    To let Wazuh see Suricata alerts, enable EVE JSON output in Suricata config and configure the Wazuh agent to monitor the <code>/var/log/suricata/eve.json</code> file.
+  </p>
+  <p>Suricata EVE JSON snippet (example enabled in <code>/etc/suricata/suricata.yaml</code>):</p>
+  <pre class="rule">
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: /var/log/suricata/eve.json
+      types:
+        - alert:
+        - http:
+        - dns:
+  </pre>
+
+  <p>Then configure the Wazuh agent (on the Suricata host) to collect the file by adding to <code>/var/ossec/etc/ossec.conf</code>:</p>
+  <pre class="rule">
+  &lt;localfile&gt;
+  &lt;log_format&gt;json&lt;/log_format&gt;
+  &lt;location&gt;/var/log/suricata/eve.json&lt;/location&gt;
+  &lt;/localfile&gt;
+  </pre>
+  <p>Restart the Wazuh agent afterwards:</p>
+  <pre class="rule">sudo systemctl restart wazuh-agent</pre>
+
+  <h2 id="tests">Testing: nmap & controlled tests</h2>
+  <p>
+    Use Kali for tests. Examples:
+    <ul>
+      <li>Nmap SYN scan (will trigger scan rules): <code>nmap -sS -Pn -T4 -p 1-1000 --open 192.168.1.0/29</code></li>
+      <li>ICMP flood (be careful on shared networks): <code>sudo hping3 --icmp --flood &lt;target-ip&gt;</code></li>
+      <li>TCP SYN flood test (lab only): <code>sudo hping3 -S --flood --rand-source -p 80 &lt;target-ip&gt;</code></li>
+    </ul>
+    After each test:
+    <ol>
+      <li>Check Suricata logs: <code>sudo tail -f /var/log/suricata/fast.log</code> or inspect <code>/var/log/suricata/eve.json</code>.</li>
+      <li>Confirm Wazuh ingested Suricata alerts: Wazuh → Security events filter by agent / suricata.</li>
+    </ol>
+  </p>
+  <figure>
+      <img src="Task5/Suricata Json.png" width="100%" height="25%">
+      <figcaption><em>Suricata JSON log format for an IDS alert</em></figcaption>
+    </figure>
+
+
+  <h2 id="kalipentest">Scan Detection with Kali, Suricata & Wazuh</h2>
+<p>
+  In this task, I configured Suricata on pfSense and performed controlled penetration testing using a Kali Linux machine connected to the WAN interface. The goal was to detect Nmap scanning attempts, trigger Suricata alerts, and collect those alerts inside Wazuh SIEM for correlation.
+</p>
+
+<h3>Step 1 — Prepare pfSense WAN for Scanning</h3>
+<ol>
+  <li>
+    Confirm pfSense WAN interface is assigned an IP (e.g., <code>172.16.92.128</code>) and accessible from Kali Linux.
+  </li>
+  <li>
+    Disable default block settings temporarily (for lab only):
+    <ul>
+      <li><strong>Firewall → WAN → Add Rule</strong></li>
+      <li>Action: <strong>Pass</strong></li>
+      <li>Protocol: <strong>Any</strong></li>
+      <li>Source: <strong>any</strong></li>
+      <li>Destination: <strong>WAN Address</strong></li>
+      <li>Description: <em>Kali Pentest 28852</em></li>
+    </ul>
+  </li>
+</ol>
+
+<h3>Step 2 — Create Port Forward (to Force Scan Traffic Through Suricata)</h3>
+<p>This ensures WAN traffic is not dropped silently and can be inspected by Suricata.</p>
+<ol>
+  <li>Go to <strong>Firewall → NAT → Port Forward</strong>.</li>
+  <li>Add rule:
+    <ul>
+      <li>Interface: <strong>WAN</strong></li>
+      <li>Protocol: <strong>TCP/UDP</strong></li>
+      <li>Destination: <strong>WAN Address</strong></li>
+      <li>Destination Port Range: <strong>1–65535</strong></li>
+      <li>Redirect target IP: <strong>192.168.1.3 (Ubuntu Suricata server)</strong></li>
+      <li>Description: <em>Forward scan traffic for Suricata inspection</em></li>
+    </ul>
+  </li>
+  <li>Save &amp; Apply.</li>
+</ol>
+
+<h3>Step 3 — Install and Configure Suricata</h3>
+<ol>
+  <li>Install: <strong>System → Package Manager → Available Packages → Suricata</strong>.</li>
+  <li>Enable Suricata on interfaces:
+    <ul>
+      <li>WAN</li>
+      <li>LAN1 (192.168.10.0/24)</li>
+      <li>LAN2 (192.168.20.0/24)</li>
+    </ul>
+  </li>
+  <li>Open <strong>Services → Suricata → Global Settings</strong>:
+    <ul>
+      <li>Enable <strong>ETOpen Emerging Threats Rules</strong></li>
+      <li>Enable automatic rule updates</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>Step 4 — Enable Required Rule Categories</h3>
+<p>For each interface (WAN, LAN1, LAN2), enable:</p>
+<ul>
+  <li>emerging-scan.rules</li>
+  <li>emerging-dos.rules</li>
+  <li>emerging-trojan.rules</li>
+  <li>emerging-malware.rules</li>
+  <li>emerging-exploit.rules</li>
+</ul>
+<p>Then go to: <strong>Interface → WAN → Save & Apply</strong> (repeat for LAN1, LAN2).</p>
+
+<h3>Step 5 — Add Custom Local Rule (for Wazuh Correlation)</h3>
+<p>In <strong>Services → Suricata → Rules → WAN → Custom Rules</strong>, add:</p>
+<pre class="rule">
+alert tcp any any -> any any (msg:"[CUSTOM] Nmap SYN Scan Detected"; flags:S; threshold:type both, track by_src, count 10, seconds 30; sid:1000001; rev:1;)
+alert icmp any any -> any any (msg:"[CUSTOM] ICMP Flood Detected"; itype:8; threshold:type both, track by_src, count 100, seconds 10; sid:1000002; rev:1;)
+alert tcp any any -> any any (msg:"[CUSTOM] TCP SYN Flood Detected"; flags:S; threshold:type threshold, track by_src, count 50, seconds 10; sid:1000003; rev:1;)
+</pre>
+
+<h3>Step 6 — Configure Suricata Logs for Wazuh</h3>
+<p>
+  On the Ubuntu server (192.168.1.3) running Wazuh agent, ensure Suricata is writing to <code>/var/log/suricata/eve.json</code>.
+</p>
+<pre class="rule">sudo nano /var/ossec/etc/ossec.conf</pre>
+<p>Check inside the <code>&lt;localfile&gt;</code> section:</p>
+<pre class="rule">
+  &lt;localfile&gt;
+  &lt;log_format&gt;json&lt;/log_format&gt;
+  &lt;location&gt;/var/log/suricata/eve.json&lt;/location&gt;
+  &lt;/localfile&gt;
+  </pre>
+<p>Restart agent:</p>
+<pre class="rule">sudo systemctl restart wazuh-agent</pre>
+
+<h3>Step 7 — Perform the Scan from Kali</h3>
+<p>Run a TCP SYN scan:</p>
+<pre class="rule">
+sudo nmap -sS -Pn -T4 -p 1-100 --open -oN "Name-of-File" 172.16.92.128
+</pre>
+<h4>Why -sS (SYN Scan)?</h4>
+<p>
+  A SYN scan is considered stealthy because it never completes the full TCP handshake. 
+  Only SYN packets are sent; if a SYN/ACK is received, the port is open. 
+  The connection is immediately reset, reducing log noise and making detection
+  harder—perfect for lab IDS testing.
+</p>
+
+<h4>Why -Pn?</h4>
+<p>
+  <code>-Pn</code> tells Nmap to skip host discovery.  
+  In labs, firewalls often drop ICMP echo requests, which causes Nmap to treat hosts as offline.  
+  <code>-Pn</code> forces Nmap to scan the target regardless, ensuring Suricata receives the packets.
+</p>
+
+<h3>Step 8 — Controlled Brute‑Force Attempt</h3>
+<p>
+  A safe, limited bruteforce test was performed against a lab SSH service on the Ubuntu server (192.168.1.3).  
+  The intent was strictly educational: to validate IDS detection of authentication‑based attacks.
+</p>
+
+<p>Brute‑force command used (limited to 5 attempts):</p>
+<pre class="rule">
+hydra -l testuser -P passwords.txt -t 1 ssh://172.16.92.128
+</pre>
+
+<ul>
+  <li><strong>-l testuser</strong>: Known test account (lab only)</li>
+  <li><strong>passwords.txt</strong>: File containing 5 intentional wrong passwords</li>
+  <li><strong>-t 1</strong>: Only one thread for safety</li>
+  <li><strong>Service:</strong> SSH running on Ubuntu</li>
+</ul>
+
+<p>
+  Wazuh successfully detected multiple failed auth attempts via Suricata and system logs:
+</p>
+
+<pre class="rule">
+sshd: Failed password for testuser from 172.16.92.129 port 51432 ssh2
+Wazuh Alert: Multiple authentication failures detected (Rule 5710)
+</pre>
+
+<h3>Step 9 — Confirm Alerts in Suricata & Wazuh</h3>
+<ul>
+  <li>Open <strong>Status → System Logs → Suricata → Alerts</strong></li>
+  <li>Check for:
+    <ul>
+      <li>ET SCAN Nmap SYN Scan</li>
+      <li>CUSTOM TCP SYN Scan Detected (sid:1000003)</li>
+    </ul>
+  </li>
+  <li>Open Wazuh → Security Events</li>
+  <li>Look for Suricata rules triggering, e.g.:
+    <pre class="rule">
+[CUSTOM] TCP SYN Scan Detected from 172.16.92.129 → 192.168.1.3, SID: 1000003
+    </pre>
+  </li>
+</ul>
+
+
+
+<h3>Step 9 — Analysis</h3>
+<p>
+  The scan originating from Kali Linux was successfully detected by Suricata running on pfSense. The Suricata alerts were forwarded to the Wazuh agent on Ubuntu, where they were parsed and displayed in the Wazuh dashboard. Both Emerging Threats and the custom rule triggered correctly, confirming detection on WAN. This proves that the network intrusion detection pipeline is functioning end-to-end.
+</p>
+
+<h2 id="evidences">Evidences</h2>
+
+<figure>
+      <img src="Task6/Kali schedule on.png" width="100%" height="25%">
+      <figcaption><em>Kali penetration window open</em></figcaption>
+</figure>
+<figure>
+      <img src="Task6/Kali interface.png" width="100%" height="25%">
+      <figcaption><em>Kali linux scanning</em></figcaption>
+</figure>
+<figure>
+      <img src="Task6/Pfsense logs.png" width="100%" height="25%">
+      <figcaption><em>Pfsense Suricata alerts</em></figcaption>
+</figure>
+<figure>
+      <img src="Task6/Wazuh logs.png" width="100%" height="25%">
+      <figcaption><em>Wazuh Suricata alerts</em></figcaption>
+  </figure>
+<figure style="text-align: center; margin: 20px 0;">
+    <a href="Task6/nmap_scan_28852_20251207_152207.txt" target="_blank" class="view-btn">
+        View nmap File
+    </a>
+</figure>
+<figure>
+      <img src="Task6/Bruteforce.png" width="100%" height="25%">
+      <figcaption><em>Bruteforce testing</em></figcaption>
+    </figure>
+
+
+  <h2 id="tuning">Tuning & recommendations</h2>
+  <ul>
+    <li>Disable NIC offloading if Suricata complains (System → Advanced → Networking on pfSense; on Linux disable via <code>ethtool</code>).</li>
+    <li>Start with broader rule matches in the lab (easier to detect), then narrow to signature IDs for production.</li>
+    <li>Rate-limit noisy rules and suppress known benign signatures to reduce false positives.</li>
+    <li>Keep <code>eve.json</code> rotation in mind; ensure Wazuh agent reads current file (use logrotate or filebeat in very large environments).</li>
+    <li>Enable Suricata Inline IPS mode for active blocking.</li>
+    <li>Rate‑limit SSH using <code>ufw</code> or pfSense firewall rules.</li>
+    <li>Disable password authentication; use SSH keys only.</li>
+    <li>Enable GeoIP blocking for non‑local regions.</li>
+    <li>Set automatic alerts for repeated failures in Wazuh.</li>
+  </ul>
+
+  
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">© CNET-F25 — Sezerano Beni — 28852</div>
+</footer>
+
+<!-- Return to Top Button -->
+<button id="topBtn" title="Go to top">↑ Top</button>
+
+<script>
+let topButton = document.getElementById("topBtn");
+window.onscroll = function(){scrollFunction()};
+function scrollFunction(){
+  if(document.body.scrollTop>200 || document.documentElement.scrollTop>200) topButton.style.display="block";
+  else topButton.style.display="none";
+}
+topButton.onclick = function(){ window.scrollTo({ top:0, behavior:'smooth' }); };
+</script>
+</body>
+</html>

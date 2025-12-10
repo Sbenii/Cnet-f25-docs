@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Automated Backup & Restore of pfSense</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* Extra styling for report-style */
+body { line-height: 1.6; }
+.main-nav { margin-bottom: 24px; }
+.toc {
+    border: 2px solid var(--accent);
+    padding: 12px;
+    margin-bottom: 24px;
+    border-radius: 8px;
+    background: var(--bg);
+}
+h2 { margin-top: 32px; color: var(--accent); }
+p img { display: block; max-width: 600px; margin: 12px 0; }
+code { background:#fff3; padding:2px 6px; border-radius:4px; }
+pre.rule { background:#f6f9ff; padding:12px; border-radius:6px; overflow:auto; }
+</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <h1>Task 10 — Automated Backup & Restore of pfSense</h1>
+  </div>
+</header>
+
+<nav class="main-nav wrap">
+  <a href="index.html">Home</a>
+  <a href="pfsense.html" >pfSense</a>
+  <a href="windows.html">Windows Server</a>
+  <a href="linux.html">Linux Server</a>
+  <a href="wazuh.html">Wazuh</a>
+  <a href="security.html">Security Testing</a>
+  <a href="vpn.html">OpenVPN</a>
+  <a href="advanced.html">Advanced testing</a>
+  <a href="backups.html" class="active">Backup & Restore</a>
+  <a href="summary.html">Summary</a>
+</nav>
+
+<main class="wrap">
+
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ul>
+    <li><a href="#overview">Overview & Goals</a></li>
+    <li><a href="#autobackup">Automated Backup Setup</a></li>
+    <li><a href="#sendemail">Email Notification Setup</a></li>
+    <li><a href="#cronjob">Scheduling the Backup</a></li>
+    <li><a href="#restore">Restore from Backup</a></li>
+    <li><a href="#evidence">Evidence & Testing</a></li>
+  </ul>
+</div>
+
+<h2 id="overview">Overview & Goals</h2>
+<p>
+This task demonstrates automated backup and restore of pfSense configurations. The goal is to:
+<ul>
+<li>Periodically export the pfSense configuration (<code>config.xml</code>).</li>
+<li>Send the backup automatically via email.</li>
+<li>Verify the ability to restore from a backup to recover previous settings.</li>
+</ul>
+</p>
+
+<h2 id="autobackup">Automated Backup Setup</h2>
+<p>
+A shell script was created at <code>/root/backup_pfsense.sh</code> to automate configuration dumps:
+</p>
+<pre class="rule">
+#!/bin/sh
+BACKUP_DIR="/root/pfsense_backups"
+mkdir -p $BACKUP_DIR
+
+DATE=$(date +%Y%m%d_%H%M)
+CONFIG_FILE="$BACKUP_DIR/config_${DATE}.xml"
+
+# Copy the real config file to backup directory
+cp /cf/conf/config.xml $CONFIG_FILE
+
+# Send backup via email
+/root/send_backup_email.sh "$DATE" "$CONFIG_FILE"
+</pre>
+<p>
+Explanation of the script:
+<ul>
+<li><code>mkdir -p</code> ensures the backup directory exists.</li>
+<li><code>DATE=$(date +%Y%m%d_%H%M)</code> generates a timestamp for unique backup names.</li>
+<li><code>cp /cf/conf/config.xml</code> copies the actual pfSense configuration file.</li>
+<li>The script calls <code>/root/send_backup_email.sh</code> to send the backup as an email attachment.</li>
+</ul>
+</p>
+
+<h2 id="sendemail">Email Notification Setup</h2>
+<p>
+To send backups via email, a secondary script <code>/root/send_backup_email.sh</code> was created using Gmail SMTP and <code>curl</code> with proper CRLF handling:
+</p>
+<pre class="rule">
+#!/bin/sh
+
+SMTP_USER="sezebeni@gmail.com"
+SMTP_PASS="YOUR_GMAIL_APP_PASSWORD"
+TO="sezebeni@gmail.com"
+FROM="$SMTP_USER"
+SUBJECT="pfSense Backup $1"
+FILE="$2"
+
+if [ ! -f "$FILE" ]; then
+  echo "ERROR: File not found: $FILE"
+  exit 2
+fi
+
+TMPMAIL=$(mktemp /tmp/mail.XXXXXX) || exit 3
+
+cat &gt;&gt; "$TMPMAIL" &lt;&lt;EOF
+From: $FROM
+To: $TO
+Subject: $SUBJECT
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUND1234"
+
+--BOUND1234
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Attached is the pfSense configuration backup.
+
+--BOUND1234
+Content-Type: application/xml; name="$(basename "$FILE")"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="$(basename "$FILE")"
+
+$(base64 "$FILE")
+
+--BOUND1234--
+EOF
+
+# Send email via Gmail SMTP (SSL, port 465) with proper CRLF endings
+curl --silent --show-error \
+     --url "smtps://smtp.gmail.com:465" \
+     --ssl-reqd \
+     --mail-from "$FROM" \
+     --mail-rcpt "$TO" \
+     --user "$SMTP_USER:$SMTP_PASS" \
+     --upload-file "$TMPMAIL" \
+     --crlf \
+     -v --max-time 60
+
+RC=$?
+rm -f "$TMPMAIL"
+exit $RC
+</pre>
+<p>
+Explanation of the script:
+<ul>
+<li>Generates a temporary MIME email file with the backup attached in base64 encoding.</li>
+<li>Uses <code>curl --crlf</code> to ensure Gmail properly processes the email.</li>
+<li>Supports Gmail SMTP authentication and SSL on port 465.</li>
+<li>The backup attachment is now the actual pfSense configuration XML with valid XML content.</li>
+</ul>
+</p>
+
+<p>
+This script attaches the configuration file and sends it via Gmail SMTP using SSL. It is fully compatible with the pfSense <code>sh</code> shell.
+</p>
+
+<h2 id="cronjob">Scheduling the Backup</h2>
+<p>
+The backup script is scheduled to run every hour using the root crontab:
+</p>
+<pre class="rule">
+10 * * * * root /root/backup_pfsense.sh
+</pre>
+<p>
+- Minute 10 of every hour triggers the backup.
+- The script saves the XML to <code>/root/pfsense_backups</code> and calls <code>send_backup_email.sh</code> to email the backup.
+</p>
+
+<h2 id="restore">Restore from Backup</h2>
+<p>
+To test restore functionality:
+<ol>
+<li>Backup the current configuration using the automated script.</li>
+<li>Modify a setting in pfSense (e.g., change firewall rule or DNS settings).</li>
+<li>Go to <strong>Diagnostics → Backup & Restore</strong> in pfSense web GUI.</li>
+<li>Upload a previous <code>config.xml</code> from <code>/root/pfsense_backups</code> or your email attachment.</li>
+<li>Click <strong>Restore Configuration</strong>. The system reloads with previous settings.</li>
+<li>Verify that the modified setting reverted to its original value.</li>
+</ol>
+</p>
+
+<h2 id="evidence">Evidence & Testing</h2>
+
+<figure>
+      <img src="Task10/1.Available backups.png" width="100%" height="50%">
+      <figcaption><em>Available backups</em></figcaption>
+</figure>
+<figure>
+    <video width="100%" height="50%" controls>
+        <source src="Task10/5.Restore process1.mov" type="video/mp4">
+        
+    </video>
+    <figcaption><em>Backup restore process</em></figcaption>
+</figure>
+<figure>
+      <img src="Task10/4.Cron schedule.png" width="100%" height="50%">
+      <figcaption><em>Crontab schedule</em></figcaption>
+</figure>
+<figure>
+      <img src="Task10/6.Email config.png" width="100%" height="50%">
+      <figcaption><em>Email received from pfSense</em></figcaption>
+</figure>
+
+<figure style="text-align: center; margin: 20px 0;">
+    <a href="Task10/config_20251206_1410.xml" target="_blank" class="view-btn">
+        View XML File
+    </a>
+</figure>
+
+</main>
+
+<footer class="site-footer">
+<div class="wrap">© CNET-F25 — Sezerano Beni — 28852</div>
+</footer>
+
+<!-- Return to Top Button -->
+<button id="topBtn" title="Go to top">↑ Top</button>
+
+<script>
+let topButton = document.getElementById("topBtn");
+window.onscroll = function(){scrollFunction()};
+function scrollFunction(){
+  if(document.body.scrollTop>200 || document.documentElement.scrollTop>200) topButton.style.display="block";
+  else topButton.style.display="none";
+}
+topButton.onclick = function(){ window.scrollTo({ top:0, behavior:'smooth' }); };
+</script>
+</body>
+</html>

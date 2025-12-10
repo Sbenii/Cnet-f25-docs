@@ -1,0 +1,164 @@
+:root{
+    --bg:#e4edf7;
+    --card:#cadff9;
+    --accent:#1c6bb9;
+}
+*{
+    box-sizing:border-box
+}
+body{
+    font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;
+    background:var(--bg);
+    margin:0;
+    color:#111
+}
+.wrap{
+    
+    max-width:1000px;
+    margin:0 auto;
+    padding:16px
+}
+.site-header{
+    background:#486ca6;
+    padding:18px 0;
+    border-bottom:1px solid #eee
+}
+.site-header h1{
+    margin:0;
+    font-size:1.3rem
+}
+
+.main-nav{
+    display:flex;
+    gap:12px;padding:12px 0;
+    border-bottom:1px solid #eee
+}
+.main-nav a{
+    text-decoration:none;
+    padding:8px 12px;
+    border-radius:8px;
+    color:#333
+}
+.main-nav a.active{
+    background:var(--accent);
+    color:#fff
+}
+.grid{
+    display:grid;
+    grid-template-columns:2fr 1fr;
+    gap:16px
+}
+.card{
+    background:var(--card);
+    padding:12px;border-radius:10px;
+    box-shadow:0 6px 18px rgba(0,0,0,0.04)
+}
+.images .thumbs{
+    display:flex;gap:8px
+}
+.images img{
+    width:100px;
+    height:70px;
+    object-fit:cover;
+    border-radius:6px
+}
+.site-footer{padding:12px;
+    text-align:center;
+    color:var(--muted);
+    font-size:12px;
+    margin-top:36px
+}
+.sub-nav{
+    display:flex;
+    gap:12px;
+    margin-bottom:16px;
+    background:#fff3;
+    padding:8px 12px;
+    border-radius:8px;
+}
+
+.sub-nav a{
+    text-decoration:none;
+    padding:6px 10px;
+    border-radius:6px;
+    color:#1c6bb9;
+    font-weight:500;
+}
+
+.sub-nav a:hover{
+    background:#1c6bb915;
+}
+
+.ip-table{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:10px;
+}
+
+.ip-table th,
+.ip-table td{
+    border:1px solid #9993;
+    padding:8px;
+    text-align:left;
+    background:#ffffff40;
+}
+
+.ip-table th{
+    background:#1c6bb9;
+    color:white;
+}
+.tab-content {
+    display: none;
+}
+
+.tab-content.visible {
+    display: block;
+}
+.sub-nav a.sub-active {
+    background: var(--accent);
+    color: white;
+}
+
+/* Return to Top Button */
+#topBtn {
+    display: none; /* Hidden by default */
+    position: fixed;
+    bottom: 40px;
+    right: 40px;
+    z-index: 99;
+    font-size: 18px;
+    border: none;
+    outline: none;
+    background-color: var(--accent);
+    color: white;
+    cursor: pointer;
+    padding: 12px 16px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    transition: background-color 0.3s;
+}
+
+#topBtn:hover {
+    transform: translateY(-2px);
+    background-color: #0f4c8c; /* Darker shade for hover */
+}
+
+
+/* View xml Button */
+.view-btn {
+    display: inline-block;
+    padding: 10px 20px;
+    background-color: var(--accent);
+    color: white;
+    font-weight: bold;
+    font-size: 16px;
+    text-decoration: none;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.view-btn:hover {
+    transform: translateY(-2px);
+    background-color:#0f4c8c ;  /* Darker shade for hover */
+}

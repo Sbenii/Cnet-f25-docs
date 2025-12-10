@@ -1,0 +1,10 @@
+# Nmap 7.95 scan initiated Sun Dec  7 15:47:30 2025 as: /usr/lib/nmap/nmap -sS -Pn -T4 -p 1-1000 --open -oN nmap_scan_28852_20251207_152207.txt 172.16.92.128
+Nmap scan report for 172.16.92.128
+Host is up (0.024s latency).
+Not shown: 998 closed tcp ports (reset)
+PORT   STATE SERVICE
+22/tcp open  ssh
+80/tcp open  http
+MAC Address: 00:0C:29:32:23:B1 (VMware)
+
+# Nmap done at Sun Dec  7 15:47:35 2025 -- 1 IP address (1 host up) scanned in 4.64 seconds

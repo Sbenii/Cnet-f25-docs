@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenVPN — Documentation (28852)</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* Extra styling for report-style */
+body { line-height: 1.6; }
+.main-nav { margin-bottom: 24px; }
+.toc {
+    border: 2px solid var(--accent);
+    padding: 12px;
+    margin-bottom: 24px;
+    border-radius: 8px;
+    background: var(--bg);
+}
+h2 { margin-top: 32px; color: var(--accent); }
+p img { display: block; max-width: 600px; margin: 12px 0; }
+code { background:#fff3; padding:2px 6px; border-radius:4px; }
+pre.rule { background:#f6f9ff; padding:12px; border-radius:6px; overflow:auto; }
+.note { background:#fffef0; border-left:4px solid #f1c40f; padding:8px; border-radius:4px; }
+</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <h1>Task 7 — OpenVPN for IT OU</h1>
+  </div>
+</header>
+
+<nav class="main-nav wrap">
+  <a href="index.html">Home</a>
+  <a href="pfsense.html">pfSense</a>
+  <a href="windows.html">Windows Server</a>
+  <a href="linux.html">Linux Server</a>
+  <a href="wazuh.html">Wazuh</a>
+  <a href="security.html">Security Testing</a>
+  <a href="vpn.html" class="active">OpenVPN</a>
+  <a href="advanced.html">Advanced testing</a>
+  <a href="backups.html">Backup & Restore</a>
+  <a href="summary.html">Summary</a>
+</nav>
+
+<main class="wrap">
+
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <ul>
+      <li><a href="#overview">Overview & Strategy</a></li>
+      <li><a href="#prereq">Prerequisites</a></li>
+      <li><a href="#step1">Step 1 — Create CA & Certificates</a></li>
+      <li><a href="#step2">Step 2 — OpenVPN Server (Wizard)</a></li>
+      <li><a href="#step3">Step 3 — User Setup & Certificate Binding</a></li>
+      <li><a href="#step4">Step 4 — Firewall Rules & Verification</a></li>
+      <li><a href="#step5">Step 5 — Client Export & Test Connection</a></li>
+      <li><a href="#evidence">Evidence & Screenshots</a></li>
+      <li><a href="#radius">Optional: AD/RADIUS OU binding (how-to)</a></li>
+      <li><a href="#notes">Troubleshooting Notes</a></li>
+    </ul>
+  </div>
+
+  <h2 id="overview">Overview & Strategy</h2>
+  <p>
+    This guide walks through configuring an OpenVPN server on pfSense.
+    The chosen authentication method is <strong>certificate-based</strong>. To enforce the "IT OU" restriction without a RADIUS server, we use a manual certificate assignment model:
+    we create a dedicated user certificate named <code>StudentID-IT-Cert</code> and assign it only to authorized IT users. Only holders of that certificate can connect.
+  </p>
+
+  <h2 id="prereq">Prerequisites</h2>
+  <ul>
+    <li>pfSense with admin access</li>
+    <li>OpenVPN Client Export package installed on pfSense (System → Package Manager → install <code>openvpn-client-export</code>)</li>
+    <li>An existing Windows AD for later AD/RADIUS binding (optional)</li>
+  </ul>
+
+  <h2 id="step1">Step 1 — Create the Certificate Authority & Certificates</h2>
+  <p>
+    Certificate-based VPN requires a CA and server/user certificates. Steps in pfSense:
+  </p>
+  <ol>
+    <li>System → Cert. Manager → CAs → Add:
+      <ul><li><strong>Descriptive name:</strong> <code>StudentID-VPN-CA</code></li>
+      <li>Method: <em>Create an Internal Certificate Authority</em></li></ul>
+    </li>
+    <li>Certificates → Add/Sign → Add server certificate:
+      <ul><li><strong>Descriptive name:</strong> <code>StudentID-VPN-Server</code></li>
+      <li>Method: Create an Internal Certificate, CA: <code>StudentID-VPN-CA</code>, Type: Server Certificate</li></ul>
+    </li>
+    <li>Create the user/client certificate (the IT certificate):
+      <ul><li><strong>Descriptive name:</strong> <code>StudentID-IT-Cert</code></li>
+      <li>Method: Create Internal Certificate, CA: <code>StudentID-VPN-CA</code>, Type: User Certificate</li></ul>
+    </li>
+  </ol>
+  <p class="note"><strong>Note:</strong> Keep private keys secure — only export/distribute client certs to authorized personnel.</p>
+
+  <h2 id="step2">Step 2 — Configure the OpenVPN Server (Wizard)</h2>
+  <p>
+    Use the pfSense OpenVPN Wizard to avoid missing options. Key settings to use:
+  </p>
+  <ul>
+    <li>VPN → OpenVPN → Wizards → choose <strong>Local User Access</strong> (recommended for Cert+User flexibility)</li>
+    <li>Certificate Authority: <code>StudentID-VPN-CA</code></li>
+    <li>Server Certificate: <code>StudentID-VPN-Server</code></li>
+    <li>Interface: <code>WAN</code>; Protocol: <code>UDP</code>; Port: <code>1194</code></li>
+    <li><strong>Tunnel Network:</strong> choose non-overlapping range, e.g. <code>10.10.50.0/24</code></li>
+    <li><strong>IPv4 Local Network(s):</strong> add your LAN1 subnet (e.g., <code>192.168.1.0/29</code>) so clients can reach LAN1</li>
+    <li>Leave "Redirect gateway" unchecked unless you want full-tunnel</li>
+    <li>Finish the wizard and allow it to create firewall rules (it can create the basics for you)</li>
+  </ul>
+
+  <h2 id="step3">Step 3 — User Setup (Binding the Certificate)</h2>
+  <p>
+    Instead of using RADIUS, we bind the user certificate to a pfSense local user:
+  </p>
+  <ol>
+    <li>System → User Manager → Add:
+      <ul><li>Username: <code>IT-User</code> (or a specific admin username)</li>
+      <li>Set a password (used only if you enabled user/pass in server settings)</li></ul>
+    </li>
+    <li>Save, then Edit the user → User Certificates → Add → Choose existing certificate → select <code>StudentID-IT-Cert</code> → Save</li>
+    <li>Only users who receive this certificate should be given the exported VPN profile.</li>
+  </ol>
+
+  <h2 id="step4">Step 4 — Firewall Verification</h2>
+  <p>
+    Ensure OpenVPN traffic is allowed from the Tunnel subnet to LAN1:
+  </p>
+  <ul>
+    <li>Firewall → Rules → OpenVPN — a rule should exist allowing the Tunnel Network to access LAN1.</li>
+    <li>Refine the rule by setting Source: <code>10.10.50.0/24</code> (Tunnel network) and Destination: <code>192.168.1.0/29</code> (LAN1).</li>
+  </ul>
+
+  <h2 id="step5">Step 5 — Client Export & Test Connection</h2>
+  <p>
+    Generate and test a client config:
+  </p>
+  <ol>
+    <li>VPN → OpenVPN → Client Export</li>
+    <li>Find the user bound to <code>StudentID-IT-Cert</code> and download the <code>.ovpn</code> file (Most Clients / Inline config recommended)</li>
+    <li>On the client machine install an OpenVPN client (OpenVPN Connect, or open-source client) and import the <code>.ovpn</code> file</li>
+    <li>Connect. Verify the client receives an IP in <code>10.10.50.0/24</code> and can ping the DC (example: <code>ping 192.168.1.2</code>)</li>
+  </ol>
+
+  <h2 id="evidence">Evidence & Screenshots</h2>
+   <figure>
+      <img src="Task7/Server config 1.png" width="100%" height="50%">
+      <figcaption><em>OpenVPN server configuration pt.1</em></figcaption>
+    </figure>
+     <figure>
+      <img src="Task7/Server config 2.png" width="100%" height="50%">
+      <figcaption><em>OpenVPN server configuration pt.2</em></figcaption>
+    </figure>
+     <figure>
+      <img src="Task7/Server config 3.png" width="100%" height="50%">
+      <figcaption><em>OpenVPN server configuration pt.3</em></figcaption>
+    </figure>
+     <figure>
+      <img src="Task7/Server config 4.png" width="100%" height="50%">
+      <figcaption><em>OpenVPN server configuration pt.4</em></figcaption>
+    </figure>
+     <figure>
+      <img src="Task7/OpenVPN connected details.png" width="100%" height="50%">
+      <figcaption><em>Successful client connection to OpenVPN</em></figcaption>
+    </figure>
+     <figure>
+      <img src="Task7/Pinging successfully from vpn.png" width="100%" height="50%">
+      <figcaption><em>Successful ping from OpenVPN to LAN1</em></figcaption>
+    </figure>
+  <h2 id="notes">Troubleshooting Notes</h2>
+  <ul>
+    <li>If VPN connects but cannot reach LAN1: verify <em>IPv4 Local Network(s)</em> is set correctly in server settings and that the OpenVPN firewall rule permits traffic to LAN1.</li>
+    <li>Windows servers may block pings from the tunnel network by firewall profile — temporarily allow ICMP or test with a TCP service (RDP) to verify connectivity.</li>
+    <li>Ensure the client's certificate was exported and installed correctly; mismatched certs cause TLS failures.</li>
+    <li>Use the OpenVPN logs on pfSense (Status → System Logs → OpenVPN) and client logs to diagnose TLS or routing issues.</li>
+  </ul>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">© CNET-F25 — Sezerano Beni — 28852</div>
+</footer>
+
+<!-- Return to Top Button -->
+<button id="topBtn" title="Go to top">↑ Top</button>
+
+<script>
+let topButton = document.getElementById("topBtn");
+window.onscroll = function(){scrollFunction()};
+function scrollFunction(){
+  if(document.body.scrollTop>200 || document.documentElement.scrollTop>200) topButton.style.display="block";
+  else topButton.style.display="none";
+}
+topButton.onclick = function(){ window.scrollTo({ top:0, behavior:'smooth' }); };
+</script>
+</body>
+</html>

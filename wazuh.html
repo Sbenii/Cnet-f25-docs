@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wazuh Manager & Agents — Documentation (28852)</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* Extra styling for report-style */
+body { line-height: 1.6; }
+.main-nav { margin-bottom: 24px; }
+.toc {
+    border: 2px solid var(--accent);
+    padding: 12px;
+    margin-bottom: 24px;
+    border-radius: 8px;
+    background: var(--bg);
+}
+h2 { margin-top: 32px; color: var(--accent); }
+p img { display: block; max-width: 600px; margin: 12px 0; }
+code { background:#fff3; padding:2px 6px; border-radius:4px; }
+pre.rule { background:#f6f9ff; padding:12px; border-radius:6px; overflow:auto; }
+</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <h1>Task 4 — Wazuh Manager & Agents</h1>
+  </div>
+</header>
+
+<nav class="main-nav wrap">
+  <a href="index.html">Home</a>
+  <a href="pfsense.html">pfSense</a>
+  <a href="windows.html">Windows Server</a>
+  <a href="linux.html">Linux Server</a>
+  <a href="wazuh.html" class="active">Wazuh</a>
+  <a href="security.html">Security Testing</a>
+  <a href="vpn.html">OpenVPN</a>
+  <a href="advanced.html">Advanced testing</a>
+  <a href="backups.html">Backup & Restore</a>
+  <a href="summary.html">Summary</a>
+</nav>
+
+<main class="wrap">
+
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <ul>
+      <li><a href="#overview">Executive Summary (what's done)</a></li>
+      <li><a href="#deploy">Deployment & Basic Setup</a></li>
+      <li><a href="#agents">Agents Enrolment</a></li>
+      <li><a href="#logs">Log ingestion</a></li>
+      <li><a href="#rules">Custom Detection Rules — created & tested</a></li>
+      <li><a href="#rules-files">Where the rule files live (exact names)</a></li>
+      <li><a href="#testing">Testing & Evidence</a></li>
+    </ul>
+  </div>
+
+  <h2 id="overview">Executive Summary</h2>
+  <p>
+    This page documents the Wazuh Manager deployment and agent integration for <strong>28852</strong>. 
+    Most infrastructure work (OVA deployment, manager/API/Kibana setup, agent enrolment for AD-28852 and LS-28852, pfSense syslog forwarding, and Suricata EVE JSON ingestion) has already been completed — see the checklist below.
+    The remaining work documented here focuses on the custom detection rules we created, where the lab-specific IDs and filenames are shown so you can reproduce the same behavior on the manager.
+  </p>
+
+  <h2 id="deploy">Deployment & Basic Setup</h2>
+  <p>
+    Wazuh OVA was deployed and hostname was set to <code>28852</code>. Manager, API and dashboard configured with at least one admin user. The Wazuh manager is reachable at <code>https://192.168.1.4/</code>.
+  </p>
+
+  <h2 id="agents">Agents Enrolment</h2>
+  <p>
+    Agents enrolled and visible in the manager: <strong>AD-28852 (Windows)</strong>, <strong>LS-28852 (Linux)</strong>, and pfSense (via remote syslog).
+  </p>
+   <figure>
+      <img src="Task4/Agent list.png" width="100%" height="50%">
+      <figcaption><em>List of enrolled agents</em></figcaption>
+    </figure>
+
+  <h2 id="logs">Log ingestion</h2>
+  <p>
+    Wazuh was set to receive logs from:
+    <ul>
+      <li>Windows Event logs (Security, System, Application) via the Wazuh Windows agent.</li>
+      <li>pfSense syslog forwarded to UDP 514 (manager configured to accept it).</li>
+      <li>Suricata EVE JSON forwarded/collected by the Linux agent and forwarded to the manager. Before you continue you may need to first check <a href="security.html">the installation of Suricata on Ubuntu server</a> </li>
+    </ul>
+  </p>
+
+  <h2 id="rules">Custom Detection Rules — created & tested</h2>
+  <p>
+    I created <strong>three</strong> lab-specific rules. Though for the third rule we already tested it in FIM monitoring task.
+    <ol>
+      <li><strong>28852_BruteForce_Windows</strong> — aggregation rule that fires after repeated failed Windows logons.</li>
+      <li><strong>28852_Scan_Network</strong> — correlates Suricata scan alerts.</li>
+      <li><strong>28852_Unauthorized_FileChange</strong> — FIM child rule for unauthorized changes.</li>
+    </ol>
+  </p>
+
+  <h3>Rule A — 28852_BruteForce_Windows (file: <code>/var/ossec/etc/rules/28852-bruteforce_rules.xml</code>)</h3>
+  <p>Notes: this rule is triggered as a correlation/aggregation rule when multiple Windows failed login alerts occur. It references the built-in event SID that the manager generates for 4625 events. You already had a variant; below is the final tested form.</p>
+
+  <pre class="rule">
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;rules&gt;
+  &lt;group name="28852-BruteForce"&gt;
+    &lt;rule id="100050" level="12" frequency="4" timeframe="60"&gt;
+      &lt;if_matched_sid&gt;60122&lt;/if_matched_sid&gt;    
+      &lt;same_source_ip /&gt;
+      &lt;description&gt;28852_BruteForce_Windows: multiple failed Windows logons from same source&lt;/description&gt;
+      &lt;group&gt;28852,authentication,bruteforce&lt;/group&gt;
+      &lt;mitre&gt;&lt;id&gt;T1110&lt;/id&gt;&lt;/mitre&gt;
+    &lt;/rule&gt;
+  &lt;/group&gt;
+&lt;/rules&gt;
+  </pre>
+
+  <p><em>Why this version:</em> we use <code>&lt;if_matched_sid&gt;60122&lt;/if_matched_sid&gt;</code> to tie to existing decoded Windows failed logon events and <code>&lt;same_source_ip /&gt;</code> to ensure aggregation is grouped per attacker IP. Frequency/timeframe tuned to 4 events in 60s (lab setting).</p>
+
+  <h3>Rule B — 28852_Scan_Network (file: <code>/var/ossec/etc/rules/28852-scan_network.xml</code>)</h3>
+  <p>Notes: this rule is triggered by Suricata alerts (the manager sees them via the EVE JSON ingestion). You confirmed it is working; below is the tested rule.</p>
+
+  <pre class="rule">
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;rules&gt;
+  &lt;group name="28852-ScanRules"&gt;
+    &lt;rule id="100051" level="10" frequency="3" timeframe="60"&gt;
+      &lt;if_group&gt;suricata&lt;/if_group&gt;
+      &lt;description&gt;28852_Scan_Network: Suricata network scan detected (correlated)&lt;/description&gt;
+      &lt;match&gt;(nmap|Nmap|scan|Portscan)&lt;/match&gt;
+      &lt;group&gt;28852,suricata,network-scan&lt;/group&gt;
+    &lt;/rule&gt;
+  &lt;/group&gt;
+&lt;/rules&gt;
+  </pre>
+
+  <p><em>Why this version:</em> uses <code>&lt;if_group&gt;suricata&lt;/if_group&gt;</code> to limit matches to Suricata-decoded events and a text <code>&lt;match&gt;</code> to look for common scan signatures. You can tighten to <code>signature_id</code> or specific rule IDs if desired.</p>
+
+  <h3>Rule C — 28852_Unauthorized_FileChange (template)</h3>
+  <p>This child rule should be created after confirming the FIM parent rule ID that your manager emits for modified files (commonly 554 but verify). The template below uses <code>&lt;if_sid&gt;554&lt;/if_sid&gt;</code> — adapt if your FIM parent SID differs.</p>
+
+  <pre class="rule">
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;rules&gt;
+  &lt;group name="28852-FIM"&gt;
+    &lt;rule id="100052" level="12"&gt;
+      &lt;if_sid&gt;554&lt;/if_sid&gt;
+      &lt;description&gt;28852_Unauthorized_FileChange: FIM modification in StudentID monitored paths&lt;/description&gt;
+      &lt;match&gt;28852&lt;/match&gt;  &lt;!-- match path fragments like /var/www/28852_docs or C:\Profiles_28852 --&gt;
+      &lt;group&gt;28852,fim,roaming,mapped&lt;/group&gt;
+    &lt;/rule&gt;
+  &lt;/group&gt;
+&lt;/rules&gt;
+  </pre>
+
+  <h2 id="rules-files">Where the rule files live</h2>
+  <p>For clarity, place your custom files under the manager rules folder so they are easy to manage and back up:</p>
+  <ul>
+    <li><code>/var/ossec/etc/rules/28852_bruteforce_windows_rules.xml</code></li>
+    <li><code>/var/ossec/etc/rules/28852_Network_scan_rules.xml</code></li>
+    <li><code>/var/ossec/etc/rules/28852_fim_rules.xml</code> (future)</li>
+  </ul>
+  <p>After updating or adding any rule file, restart the manager:</p>
+  <pre class="rule">sudo systemctl restart wazuh-manager</pre>
+
+  <h2 id="testing">Testing & Evidence</h2>
+  <p>
+    <strong>Brute-force rule test</strong>
+    <ol>
+      <li>Generate 4 failed Windows logons (Event ID 4625) from the same source IP within 60s. You can use a Windows client or Kali with RDP/SMB attempts.</li>
+      <li>Check Wazuh → Security events filter by <code>rule.id = 100050</code> (or search rule description).</li>
+    </ol>
+  </p>
+
+   <figure>
+      <img src="Task5/BruteForce.png" width="100%" height="50%">
+      <figcaption><em>FIM alerts after testing</em></figcaption>
+    </figure>
+
+  <p>
+    <strong>Scan rule test (Suricata)</strong>
+    <ol>
+      <li>Run a scan from a linux distribution: <code>nmap -sS -T4 192.168.1.3</code>.</li>
+      <li>Confirm Suricata generated an EVE JSON alert (check <code>/var/log/suricata/eve.json</code> or pfSense Suricata logs) and Wazuh ingested it.</li>
+      <li>Check Wazuh → Security events filter by <code>rule.id = 100051</code> (or search rule description).</li>
+
+    </ol>
+  </p>
+   <figure>
+      <img src="Task5/Network scan.png" width="100%" height="50%">
+      <figcaption><em>FIM alerts after testing</em></figcaption>
+    </figure>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">© CNET-F25 — Sezerano Beni — 28852</div>
+</footer>
+
+<!-- Return to Top Button -->
+<button id="topBtn" title="Go to top">↑ Top</button>
+
+<script>
+let topButton = document.getElementById("topBtn");
+window.onscroll = function(){scrollFunction()};
+function scrollFunction(){
+  if(document.body.scrollTop>200 || document.documentElement.scrollTop>200) topButton.style.display="block";
+  else topButton.style.display="none";
+}
+topButton.onclick = function(){ window.scrollTo({ top:0, behavior:'smooth' }); };
+</script>
+</body>
+</html>

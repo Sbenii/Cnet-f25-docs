@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Advanced Firewall Features & Web Filtering</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* Extra styling for report-style */
+body { line-height: 1.6; }
+.main-nav { margin-bottom: 24px; }
+.toc {
+    border: 2px solid var(--accent);
+    padding: 12px;
+    margin-bottom: 24px;
+    border-radius: 8px;
+    background: var(--bg);
+}
+h2 { margin-top: 32px; color: var(--accent); }
+p img { display: block; max-width: 600px; margin: 12px 0; }
+code { background:#fff3; padding:2px 6px; border-radius:4px; }
+pre.rule { background:#f6f9ff; padding:12px; border-radius:6px; overflow:auto; }
+</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <h1>Task 9 — Advanced Firewall Features & Web Filtering</h1>
+  </div>
+</header>
+
+<nav class="main-nav wrap">
+  <a href="index.html">Home</a>
+  <a href="pfsense.html">pfSense</a>
+  <a href="windows.html">Windows Server</a>
+  <a href="linux.html">Linux Server</a>
+  <a href="wazuh.html">Wazuh</a>
+  <a href="security.html">Security Testing</a>
+  <a href="vpn.html">OpenVPN</a>
+  <a href="advanced.html" class="active">Advanced testing</a>
+  <a href="backups.html">Backup & Restore</a>
+  <a href="summary.html">Summary</a>
+</nav>
+
+<main class="wrap">
+
+<div class="toc">
+<h2>Table of Contents</h2>
+<ul>
+  <li><a href="#pf">Port Forwarding (WAN → Internal Web Server)</a></li>
+  <li><a href="#suricata">Suricata Traffic Inspection</a></li>
+  <li><a href="#arp">ARP Monitoring & Spoofing Detection</a></li>
+  <li><a href="#webfilter">Web Filtering for LAN2 (Social Media Blocking)</a></li>
+</ul>
+</div>
+
+<h2 id="pf">Port Forwarding (WAN → Internal Web Server)</h2>
+<p>
+To allow external NAT/WAN devices to access the hosted website, a port forwarding rule was created on the pfSense firewall.
+</p>
+
+<p>Configuration steps:</p>
+<pre class="rule">
+Firewall → NAT → Port Forward → Add
+
+Interface: WAN  
+Protocol: TCP  
+Destination Port: 80 (HTTP)  
+Redirect Target IP: 192.168.1.X (web server)  
+Redirect Target Port: 80  
+NAT Reflection: Enabled (for internal testing)
+</pre>
+
+<p>
+After applying the rule, machines connected to the network interfaces were able to load the IIS / hosted web pages successfully.
+</p>
+
+<figure>
+      <img src="Task9/Accessing public webserver.png" width="100%" height="25%">
+      <figcaption><em>Machine accessing webserver</em></figcaption>
+</figure>
+
+<h2 id="suricata">Suricata Traffic Inspection (WAN, LAN1, LAN2)</h2>
+<p>
+Suricata IDS/IPS was configured across all interfaces. The same ET Open rule sets and custom local rules from Task 6 were applied.
+</p>
+
+<p>
+This ensures Suricata inspects packets passing through all network zones:
+</p>
+
+<ul>
+  <li><strong>WAN</strong> – detects external scans and attacks</li>
+  <li><strong>LAN1</strong> – internal employee network</li>
+  <li><strong>LAN2</strong> – restricted student/guest network</li>
+</ul>
+
+<p><strong>Ruleset Activation:</strong></p>
+<pre class="rule">
+Services → Suricata → Interfaces → WAN/LAN1/LAN2
+
+✔ Enable Suricata
+✔ Enable IPS Mode  
+✔ ET Open / Emerging Threats rules enabled
+✔ Custom local.rules enabled
+</pre>
+
+<p>
+During testing using Kali (connected to WAN), Suricata triggered alerts such as:
+</p>
+
+<pre class="rule">
+[CUSTOM] TCP SYN Flood Detected
+[CUSTOM] Nmap SYN Scan Detected
+</pre>
+
+<h2 id="arp">ARP Monitoring & Spoofing Detection</h2>
+<p>
+To detect ARP spoofing attempts, ARPwatch package was downloaded from pfSense packages, this helps in monitoring MAC address changes for a given IP address which can help detect some spoothing techniques like impersonating someone on a network 
+but here the network administrator will know the attack due to the ARP database which keeps record for MAC addresses used in a network, and the new device will be blocked or reported. In real-world environments this is refered to as Static DHCP mappings used to lock important host IP/MAC pairs.
+
+</p>
+
+<figure>
+      <img src="Task9/ARP watch table.png" width="100%" height="25%">
+      <figcaption><em>ARP watch database</em></figcaption>
+</figure>
+
+<h2 id="webfilter">Web Filtering for LAN2 (Social Media Blocking)</h2>
+<p>
+To restrict LAN2 users from accessing social media during specific hours (working hours), pfSense's firewall schedules and Aliases were used.
+</p>
+
+<h3>4.1 Creating Social Media Alias</h3>
+<pre class="rule">
+Firewall → Aliases → Add
+
+Name: SocialMedia  
+Hosts:
+ <i>Here you insert IPs for the domain to be blocked during schedule</i> 
+</pre>
+
+<figure>
+      <img src="Task9/Alias creation.png" width="100%" height="25%">
+      <figcaption><em>Domains to be blocked</em></figcaption>
+</figure>
+
+<p>When a user tries to access these domains the page show an error</p>
+
+<figure>
+    <video width="100%" height="50%" controls>
+        <source src="Task9/Social media block.mov" type="video/mp4">
+        
+    </video>
+    <figcaption><em>Backup restore process</em></figcaption>
+</figure>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">© CNET-F25 — Sezerano Beni — 28852</div>
+</footer>
+
+<!-- Return to Top Button -->
+<button id="topBtn" title="Go to top">↑ Top</button>
+
+<script>
+let topButton = document.getElementById("topBtn");
+window.onscroll = function(){scrollFunction()};
+function scrollFunction(){
+  if(document.body.scrollTop>200 || document.documentElement.scrollTop>200) topButton.style.display="block";
+  else topButton.style.display="none";
+}
+topButton.onclick = function(){ window.scrollTo({ top:0, behavior:'smooth' }); };
+</script>
+</body>
+</html>

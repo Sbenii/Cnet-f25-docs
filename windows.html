@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Windows Server Documentation (28852)</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* Extra styling for report-style */
+body {
+    line-height: 1.6;
+}
+.main-nav {
+    margin-bottom: 24px;
+}
+.toc {
+    border: 2px solid var(--accent);
+    padding: 12px;
+    margin-bottom: 24px;
+    border-radius: 8px;
+    background: var(--bg);
+}
+h2 {
+    margin-top: 32px;
+    color: var(--accent);
+}
+p img {
+    display: block;
+    max-width: 600px;
+    margin: 12px 0;
+}
+</style>
+</head>
+<body>
+<header class="site-header">
+    <div class="wrap">
+        <h1>Task 2 — Windows Server Documentation</h1>
+    </div>
+</header>
+
+<nav class="main-nav wrap">
+    <a href="index.html">Home</a>
+    <a href="pfsense.html">pfSense</a>
+    <a href="windows.html" class="active">Windows Server</a>
+    <a href="linux.html">Linux Server</a>
+    <a href="wazuh.html">Wazuh</a>
+    <a href="security.html">Security Testing</a>
+    <a href="vpn.html">OpenVPN</a>
+    <a href="advanced.html">Advanced testing</a>
+    <a href="backups.html">Backup & Restore</a>
+    <a href="summary.html">Summary</a>
+</nav>
+
+<main class="wrap">
+
+    <!-- Table of Contents -->
+    <div class="toc">
+        <h2>Table of Contents</h2>
+        <ul>
+            <li><a href="#install">Windows Server Installation & ADDS Promotion</a></li>
+            <li><a href="#ous">Creating OUs & Users</a></li>
+            <li><a href="#gpo">GPO Configuration — Roaming Profiles & Mapped Drives</a></li>
+            <li><a href="#iis">IIS Installation & Portfolio Website</a></li>
+            <li><a href="#ntp">NTP Configuration & GPO</a></li>
+            <li><a href="#wazuh">Wazuh Agent Configuration</a></li>
+            <li><a href="#password">Password Policy Implementation</a></li>
+            <li><a href="#login">Login Restrictions via GPO</a></li>
+            <li><a href="#software">Software Deployment via GPO</a></li>
+            <li><a href="#summary">Summary & Real-World Scenarios</a></li>
+        </ul>
+    </div>
+
+    <!-- Report content -->
+    <h2 id="install">Windows Server Installation & ADDS Promotion</h2>
+    <p>
+        Windows Server 2019 VM was installed and it was assigned a static IP 192.168.1.2 (DNS: 8.8.8.8, 192.168.2.1). 
+        Active Directory Domain Services role was installed via server manager and server was promoted to Domain Controller for 28852.f25.
+    </p>
+    <p><em>Challenges:</em> In this step a small issue of ensuring DNS configuration and time synchronization (resolved via Set-TimeZone) was met but later solved.</p>
+
+    <h2 id="ous">Creating Organizational Units (OUs) & Users</h2>
+    <p>
+        I created 4 OUs: IT, HR, Students, Finance. Where each OU has one user: IT1, HR1, Student1, Fin1.
+    </p>
+      <figure>
+      <img src="Task2/1.OUs.png" width="100%" height="50%">
+      <figcaption><em>ADUC with OUs</em></figcaption>
+    </figure>
+
+    <h2 id="gpo">Group Policy GPO Configuration</h2>
+    <p>
+        I created 6 GPOs for Roaming, Mapping, NTP, Software development, Login restrictions and Wazuh agent.
+    </p>
+      <figure>
+      <img src="Task2/6.GPOs.png" width="100%" height="50%">
+      <figcaption><em>Created GPOs</em></figcaption>
+    </figure>
+    <p>
+        I configured GPO "GPO_28852_Roaming" for roaming profiles using <code>\\AD-288522\Profiles\28852\%username%</code>.
+    </p>
+      <figure>
+      <img src="Task2/7.Setting roaming profiles.png" width="75%" height="25%">
+      <figcaption><em>Roaming profiles GPO settings</em></figcaption>
+    </figure>
+    <p>
+        I then configured a mapping drive \\AD-28852\Mapped_28852 with letter Z.
+    </p>
+      <figure>
+      <img src="Task2/9.Setting Mapped drives.png" width="60%" height="15%">
+      <figcaption><em>Mappped drive Z:</em></figcaption>
+    </figure>
+    <p>After all these I verified that the paths were accessible on client connected to the window server.</p>
+      <figure>
+      <img src="Task2/10. Mapped drives.png" width="100%" height="50%">
+      <figcaption><em>Mapped drive verification</em></figcaption>
+    </figure>
+    <h2 id="iis">Internet Information Services (IIS) Installation & Hosting Portfolio Website</h2>
+    <p>
+        I installed IIS via server's powershell ,created folder C:\inetpub\wwwroot\28852_portfolio, and placed index.html, style.css, and Profile.jpg for my portfolio. 
+        Folder permissions also were configured to allow IIS access. Then a website for my portfolio was added and a new record <code>portfolio.28852.f25</code> for hostname was created for easier access to my portfolio website. In real-world environments netwirk administrators refrain from using their servers'IPs when accessing given websites, so they create new records or hostnames for them. 
+    </p>
+      <figure>
+      <img src="Task2/14.IIS installation.png" width="60%" height="10%">
+      <figcaption><em>IIS installation</em></figcaption>
+    </figure>
+      <figure>
+      <img src="Task2/15.Website configuration.png" width="60%" height="5%">
+      <figcaption><em>Website configuration</em></figcaption>
+    </figure>
+      <figure>
+      <img src="Task2/17.Portfolio client.png" width="100%" height="50%">
+      <figcaption><em>Portfolio website testing on a client machine</em></figcaption>
+    </figure>
+
+    <h2 id="ntp">Network Time Protocol (NTP) Configuration on Domain Controller & Push via GPO</h2>
+    <p>
+        In the configuration of NTP I set time zone to Central Africa Standard Time, Configured Windows Time Service and GPO to push NTP settings to clients.
+    </p>
+      <figure>
+      <img src="Task2/18.NTP configuration on server.png" width="100%" height="50%">
+      <figcaption><em>NTP configuration in server's powershell</em></figcaption>
+    </figure>
+
+    <h2 id="wazuh">Wazuh Agent Configuration on Windows</h2>
+    <p>
+        I installed Wazuh agent on domain-joined machine (Window server), configured log forwarding (security, system, application) and FIM monitoring 
+        for local copies of IIS Portfolio, Roaming Profiles, and Mapped Drives. In this step I found out that UNC paths and drive maps can't be monitored directly, so in monitoring them I used the local mapped drive C: directory which works fine.
+    </p>
+      <figure>
+      <img src="Task2/26.Wazuh Agent deployment.png" width="100%" height="50%">
+      <figcaption><em>Windows Wazuh agent installation</em></figcaption>
+    </figure>
+      <figure>
+      <img src="Task2/27.Windows Wazuh.png" width="100%" height="50%">
+      <figcaption><em>Windows Wazuh agent active</em></figcaption>
+    </figure>
+      <figure>
+      <img src="Task2/28.Windows sending Logs to Wazuh.png" width="100%" height="50%">
+      <figcaption><em>Windows Wazuh agent logs</em></figcaption>
+    </figure>
+      <figure>
+      <img src="Task2/29.FIM monitoring.png" width="100%" height="50%">
+      <figcaption><em>Windows Wazuh agent FIM logs</em></figcaption>
+    </figure>
+
+    <h2 id="password">Password Policy Implementation</h2>
+    <p>
+        Applied strong password policies via Default Domain Policy/fine-grained GPO: min length 12, complexity enabled, expiration 30 days, 
+        history 5, lockout 3 failed attempts, reset counter 10 min, require change at first login.
+    </p>
+      <figure>
+      <img src="Task2/12.Password policy.png" width="60%" height="50%">
+      <figcaption><em>Password policy</em></figcaption>
+    </figure>
+      <figure>
+      <img src="Task2/11.Account lockout policies.png" width="60%" height="50%">
+      <figcaption><em>Account lockout policy</em></figcaption>
+    </figure>
+    <h2 id="login">Login Restrictions via GPO</h2>
+    <p>
+        Restricted login by time and account expiration for test users was impremented .
+    </p>
+      <figure>
+      <img src="Task2/21.Login restrictions for ITs.png" width="60%" height="50%">
+      <figcaption><em>IT department login restrictions</em></figcaption>
+    </figure>
+      <figure>
+      <img src="Task2/22.Login restrictions for ITs.png" width="60%" height="25%">
+      <figcaption><em>IT deppartment user account settings</em></figcaption>
+    </figure>
+    <h2 id="software">Software Deployment via GPO</h2>
+    <p>
+        As I already created a GPO "Software_Deployment_28852", MSI applications (Mozilla, VLC, Notepad++, MSDownloadManager, AnyConnect) were deployed to OUs through this GPO.
+    </p>
+      <figure>
+      <img src="Task2/23.Software deplyment policies.png" width="100%" height="50%">
+      <figcaption><em>Application deployment via GPO</em></figcaption>
+    </figure>
+      <figure>
+      <img src="Task2/25.Software deplyment on Clients.png" width="100%" height="50%">
+      <figcaption><em>Verification of deployments</em></figcaption>
+    </figure>
+    <h2 id="summary">Summary & Real-World Scenarios</h2>
+    <p>
+        Active Directory and GPOs provide centralized user and policy management. IIS portfolio demonstrates hosting 
+        and captive portal/intranet use. NTP synchronization ensures consistent event logs. Wazuh provides SIEM visibility 
+        for security and FIM monitoring.
+    </p>
+
+</main>
+
+<footer class="site-footer">
+<div class="wrap">© CNET-F25 — Sezerano Beni — 28852</div>
+</footer>
+<!-- Return to Top Button -->
+<button id="topBtn" title="Go to top">↑ Top</button>
+
+<script>
+// Scroll button functionality
+let topButton = document.getElementById("topBtn");
+window.onscroll = function() {scrollFunction()};
+function scrollFunction() {
+    if (document.body.scrollTop > 200 || document.documentElement.scrollTop > 200) {
+        topButton.style.display = "block";
+    } else {
+        topButton.style.display = "none";
+    }
+}
+topButton.onclick = function() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pfSense Documentation (28852)</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* Extra styling for report-style */
+body {
+    line-height: 1.6;
+}
+.main-nav {
+    margin-bottom: 24px;
+}
+.toc {
+    border: 2px solid var(--accent);
+    padding: 12px;
+    margin-bottom: 24px;
+    border-radius: 8px;
+    background: var(--bg);
+}
+h2 {
+    margin-top: 32px;
+    color: var(--accent);
+}
+p img {
+    display: block;
+    max-width: 600px;
+    margin: 12px 0;
+}
+</style>
+</head>
+<body>
+<header class="site-header">
+    <div class="wrap">
+        <h1>Task 1 — pfSense Documentation</h1>
+    </div>
+</header>
+
+<nav class="main-nav wrap">
+    <a href="index.html">Home</a>
+    <a href="pfsense.html" class="active">pfSense</a>
+    <a href="windows.html">Windows Server</a>
+    <a href="linux.html">Linux Server</a>
+    <a href="wazuh.html">Wazuh</a>
+    <a href="security.html">Security Testing</a>
+    <a href="vpn.html">OpenVPN</a>
+    <a href="advanced.html">Advanced testing</a>
+    <a href="backups.html">Backup & Restore</a>
+    <a href="summary.html">Summary</a>
+</nav>
+
+<main class="wrap">
+
+    <!-- Table of Contents -->
+    <div class="toc">
+        <h2>Table of Contents</h2>
+        <ul>
+            <li><a href="#executive">Executive Summary</a></li>
+            <li><a href="#topology">Topology & Naming</a></li>
+            <li><a href="#vm">VM Deployment & Interfaces</a></li>
+            <li><a href="#dhcp">DHCP for LAN2</a></li>
+            <li><a href="#nat">Outbound NAT</a></li>
+            <li><a href="#firewall">Firewall Rules</a></li>
+            <li><a href="#ntopng">NTOPng Installation</a></li>
+            <li><a href="#wazuh">Wazuh Deployment Prep & Remote Syslog Forwarding</a></li>
+            <li><a href="#backup">Automated Backups</a></li>
+            <li><a href="#ids">IDS & ARP Monitoring</a></li>
+            <li><a href="#challenges">Challenges & Resolutions</a></li>
+            <li><a href="#scenarios">Real-world Scenarios & Recommendations</a></li>
+        </ul>
+    </div>
+
+    <!-- Report content -->
+    <h2 id="executive">Executive Summary</h2>
+    <p>
+        In Task 1, the pfSense VM was deployed as the main gateway for two internal networks: 
+        LAN1 (192.168.1.0/29) for servers and LAN2 (192.168.2.0/29) for client machines. 
+        WAN is connected via NAT to allow Internet access.  
+        Key actions included interface assignment, DHCP configuration, outbound NAT, firewall rules, 
+        NTOPng setup, Wazuh integration for log forwarding, automated backups, and IDS/ARP monitoring.
+    </p>
+
+    <h2 id="topology">Topology & Naming</h2>
+    <p>
+        VMware network names: WAN (NAT), 28852-LAN1 (internal servers), 28852-LAN2 (client LAN).  
+        pfSense hostname: PF-28852.
+        LAN1 subnet: 192.168.1.0/29, pfSense: 192.168.1.1  
+        LAN2 subnet: 192.168.2.0/29, pfSense: 192.168.2.1
+    </p>
+
+    <h2 id="vm">VM Deployment & Interface Assignment</h2>
+    <p>
+        pfSense was deployed with three network adapters: WAN (NAT), OPT1 → LAN1, OPT2 → LAN2.  
+        Static IPs assigned: OPT1: 192.168.1.1/29, OPT2: 192.168.2.1/29.
+    </p>
+    <figure>
+      <img src="Task1/1.Interface Status1.png" width="100%" height="50%">
+      <figcaption><em>WAN interface status</em></figcaption>
+    </figure>
+    
+    <figure>
+      <img src="Task1/2.Interface Status2.png" width="100%" height="50%">
+      <figcaption><em>LAN 1 & LAN 2 interfaces status</em></figcaption>
+    </figure>
+
+    <h2 id="dhcp">DHCP for LAN2</h2>
+    <p>
+        DHCP server enabled on LAN2 only (OPT2) with range 192.168.2.2 - 192.168.2.6. Gateway: 192.168.2.1.  
+        LAN1 clients will receive DHCP from the Linux server later.
+    </p>
+    <figure>
+      <img src="Task1/7.DHCP Leases.png" width="100%" height="50%">
+      <figcaption><em>LAN 2 DHCP status (Leases)</em></figcaption>
+    </figure>
+    
+
+    <h2 id="nat">Outbound NAT Configuration</h2>
+    <p>
+        Verified NAT rules include LAN1 and LAN2 networks. Confirmed Internet access from a client using ping.
+    </p>
+    <p><em>Evidence placeholder:</em> <code>images/Task1/evidence_nat_outbound.png</code></p>
+
+    <h2 id="firewall">Firewall Rules and schedules(LAN1 & LAN2)</h2>
+    <p>
+        Two allow rules were created: LAN1 → any, LAN2 → any. Optional segmentation rules can be added for strict separation. According to the rules also some schedules were configured to monitor how LANs interact with each other in specified time frame.
+    </p>
+    <figure>
+      <img src="Task1/8.FireWall rules.png" width="100%" height="50%">
+      <figcaption><em>FireWall rules for LAN1</em></figcaption>
+    </figure>
+    <figure>
+      <img src="Task1/9.Firewall rules L1.png" width="100%" height="50%">
+      <figcaption><em>FireWall rules for LAN2</em></figcaption>
+    </figure>
+    <figure>
+      <img src="Task1/10.FireWall schedules.png" width="100%" height="50%">
+      <figcaption><em>firewall schedules</em></figcaption>
+    </figure>
+
+    <h2 id="ntopng">NTOPng Installation and Dashboards</h2>
+    <p>
+        Installed NTOPng package, configured to monitor LAN1 and LAN2 traffic. Dashboards verified for both networks.
+    </p>
+    <figure>
+      <img src="Task1/11.NetOpng.png" width="100%" height="50%">
+      <figcaption><em>NetOpng dashboard</em></figcaption>
+    </figure>
+    
+
+    <h2 id="wazuh">Wazuh Server Deployment Prep and remote Syslog Forwarding</h2>
+    <p>
+        Wazuh OVA VM deployed on LAN1 with static IP 192.168.1.4 and hostname 28852. Confirmed accessibility from LAN1 clients.
+        PfSense was configured to forward syslog to Wazuh via UDP 514. Then I verified that logs from pfSense were received correctly in Wazuh.
+    </p>
+    <figure>
+      <img src="Task1/12.Wazuh Pfsense logs.png" width="100%" height="50%">
+      <figcaption><em>pfSense logs in Wazuh alerts</em></figcaption>
+    </figure>
+
+    <h2 id="backup">Automated Backups</h2>
+    <p>
+        AutoConfigBackup (ACB) and verified manual backup was enabled.Firstly ACB was set to backup each time a configuration was made and this was tested and XMLs (Encrypted and decrypted) codes were provided. More on backup and restore will be elaborated in the <a href="backups.html">Backup & restore</a> tab of this documentation.
+    </p>
+    <figure>
+      <img src="Task1/13.Back up settings.png" width="100%" height="50%">
+      <figcaption><em>ACB settings configuration</em></figcaption>
+    </figure> 
+
+    <figure>
+      <img src="Task1/14.Hostd backups.png" width="100%" height="50%">
+      <figcaption><em>Backups available for restoring</em></figcaption>
+    </figure>
+
+    <figure>
+      <img src="Task1/15.Backup info 1.png" width="100%" height="50%">
+      <figcaption><em>Backup details pt.1</em></figcaption>
+    </figure>
+
+    <figure>
+      <img src="Task1/16.Backup info 2.png" width="100%" height="50%">
+      <figcaption><em>Backup details pt.2</em></figcaption>
+    </figure>
+
+    <figure>
+      <img src="Task1/17.Backup info 3.png" width="100%" height="50%">
+      <figcaption><em>Backup details pt.3</em></figcaption>
+    </figure>
+
+    <h2 id="ids">IDS & ARP Monitoring</h2>
+    <p>
+        Here I installed Suricata and Arpwatch packages on LAN1 & LAN2 in pfSense, configured interfaces, selected rules, monitored traffic, and generated safe test ARP alert by changing a mac address of a given pc on a network, which is done in real-world environments.
+    </p>
+    <figure>
+      <img src="Task1/20.ARP table.png" width="100%" height="50%">
+      <figcaption><em>ARP table </em></figcaption>
+    </figure>
+
+    <h2 id="challenges">Challenges & Resolutions</h2>
+    <p>
+        Main challenges included Wazuh port mismatch, missing network configs on OVA, Suricata offloading warnings, and ACB limitations. All resolved with configuration changes.
+    </p>
+
+    <h2 id="scenarios">Real-world Scenarios & Recommendations</h2>
+    <p>
+        <strong>Use Case 1 — Small Bank Branch:</strong> pfSense isolates teller PCs from server LAN. NTOPng monitors bandwidth, Suricata detects scans, Wazuh centralizes logs.<br>
+        <strong>Use Case 2 — University Lab:</strong> pfSense manages student VLANs, Arpwatch alerts on unauthorized MAC changes.<br>
+        Recommendations: Use TLS/TCP for log forwarding in production, schedule backup restore tests regularly.
+    </p>
+
+</main>
+
+<footer class="site-footer">
+<div class="wrap">© CNET-F25 — Sezerano Beni — 28852</div>
+</footer>
+<!-- Return to Top Button -->
+<button id="topBtn" title="Go to top">↑ Top</button>
+
+<script>
+// Scroll button functionality
+let topButton = document.getElementById("topBtn");
+window.onscroll = function() {scrollFunction()};
+function scrollFunction() {
+    if (document.body.scrollTop > 200 || document.documentElement.scrollTop > 200) {
+        topButton.style.display = "block";
+    } else {
+        topButton.style.display = "none";
+    }
+}
+topButton.onclick = function() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+</script>
+</body>
+</html>

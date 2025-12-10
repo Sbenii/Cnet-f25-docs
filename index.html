@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CNET-F25 — Documentation (28852)</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="site-header">
+<div class="wrap">
+<h1>CNET-F25 Final Project — Documentation</h1>
+<p><strong>SEZERANO Beni — 28852</strong></p>
+</div>
+</header>
+
+
+<nav class="main-nav wrap">
+<a href="index.html" class="active">Home</a>
+<a href="pfsense.html">pfSense</a>
+<a href="windows.html">Windows Server</a>
+<a href="linux.html">Linux Server</a>
+<a href="wazuh.html">Wazuh</a>
+<a href="security.html">Security Testing</a>
+<a href="vpn.html">OpenVPN</a>
+<a href="advanced.html">Advanced testing</a>
+<a href="backups.html">Backup & Restore</a>
+<a href="summary.html">Summary</a>
+</nav>
+
+
+<main class="wrap">
+
+    <!-- Sub Navigation -->
+    <nav class="sub-nav">
+        <a href="#" data-tab="overview" class="sub-active">Project Overview</a>
+        <a href="#" data-tab="topology">Topology</a>
+        <a href="#" data-tab="iptable">IP Table</a>
+    </nav>
+
+    <!-- PROJECT OVERVIEW -->
+    <section id="overview" class="card tab-content visible">
+        <h2>Project Overview</h2>
+        <p>
+          This project involves designing and deploying a fully integrated multi-service virtual network environment.
+          The setup includes a Windows Server domain controller for centralized authentication, a Linux server that
+          delivers essential network services, a pfSense firewall for traffic control and segmentation, and a Wazuh
+          SIEM platform for monitoring and security analysis. Together, these components create a complete,
+          enterprise-style infrastructure with multiple interconnected LAN segments.
+        </p>
+
+        <p>
+          The environment demonstrates a wide range of network operations, including routing, DHCP, firewall filtering,
+          file sharing, web hosting, VPN connectivity, intrusion detection, and centralized event correlation.
+          pfSense enforces access policies and manages network boundaries, while Suricata (or Snort) generates IDS
+          alerts that integrate directly into Wazuh. All systems produce logs, security events, and performance data
+          that are collected and monitored to maintain full visibility across the network.
+        </p>
+
+        <p>
+          This documentation provides configuration steps, screenshots, command outputs, verification results,
+          and security evidence from every component of the environment. The main goal is to demonstrate proper
+          network design, secure system deployment, accurate monitoring, policy enforcement, and effective detection
+          and analysis of security incidents within a controlled virtual setup.
+        </p>
+
+    </section>
+
+    <!-- TOPOLOGY -->
+    <section id="topology" class="card tab-content">
+        <h2>Topology & Network Structure</h2>
+        <p>The environment consists of two interconnected networks:</p>
+        <ul>
+            <li><strong>LAN1</strong> — Servers network (pfSense, DC, Linux, Wazuh)</li>
+            <li><strong>LAN2</strong> — Client network via DHCP from pfSense</li>
+            <li><strong>NAT/Public</strong> — To be used when accessing OpenVPN services and in penetration testing with Kali linux</li>
+        </ul>
+        <p>
+            PfSense acts as the central gateway and firewall, routing traffic between LAN1 and LAN2 
+            while enforcing network security rules. Windows Server provides domain services (AD DS & DNS) 
+            to both networks. The Linux server hosts additional services and interacts with Wazuh, which 
+            collects logs and performs security event analysis across the infrastructure.
+        </p>
+
+        <pre>
+<strong>LAN1</strong> (192.168.1.0/29):
+  pfSense .......... 192.168.1.1
+  DC-28852 ......... 192.168.1.2
+  LS-28852 ......... 192.168.1.3
+  Wazuh ............ 192.168.1.4
+
+<strong>LAN2</strong> (192.168.2.0/29) Clients (DHCP)
+        </pre>
+    </section>
+
+    <!-- IP TABLE -->
+    <section id="iptable" class="card tab-content">
+        <h2>IP Address Allocation Table</h2>
+        <table class="ip-table">
+            <tr>
+                <th>Device</th>
+                <th>Hostname</th>
+                <th>Network</th>
+                <th>IP Address</th>
+                <th>Description</th>
+            </tr>
+            <tr>
+                <td>Firewall</td>
+                <td>pfSense</td>
+                <td>LAN1</td>
+                <td>192.168.1.1</td>
+                <td>Gateway, DHCP, firewall</td>
+            </tr>
+            <tr>
+                <td>Windows Server</td>
+                <td>DC-28852</td>
+                <td>LAN1</td>
+                <td>192.168.1.2</td>
+                <td>AD DS and DNS</td>
+            </tr>
+            <tr>
+                <td>Linux Server</td>
+                <td>LS-28852</td>
+                <td>LAN1</td>
+                <td>192.168.1.3</td>
+                <td>Services and testing</td>
+            </tr>
+            <tr>
+                <td>Wazuh Server</td>
+                <td>Wazuh</td>
+                <td>LAN1</td>
+                <td>192.168.1.4</td>
+                <td>SIEM and log analysis</td>
+            </tr>
+             <tr>
+                <td>Ubuntu client</td>
+                <td>LC-28852</td>
+                <td>LAN1</td>
+                <td>192.168.1.x</td>
+                <td>Gets DHCP from linux server</td>
+            </tr>
+            <tr>
+                <td>Clients</td>
+                <td>(Auto)</td>
+                <td>LAN2</td>
+                <td>192.168.2.x</td>
+                <td>DHCP from pfSense</td>
+            </tr>
+        </table>
+    </section>
+
+</main>
+
+<!-- TAB SWITCHING SCRIPT -->
+<script>
+const links = document.querySelectorAll('.sub-nav a');
+const tabs = document.querySelectorAll('.tab-content');
+
+links.forEach(link => {
+    link.addEventListener('click', e => {
+        e.preventDefault();
+
+        // Remove active class from all links
+        links.forEach(l => l.classList.remove('sub-active'));
+
+        // Add active class to clicked link
+        link.classList.add('sub-active');
+
+        // Hide all tabs
+        tabs.forEach(tab => tab.classList.remove('visible'));
+
+        // Show the selected tab
+        const target = document.getElementById(link.dataset.tab);
+        target.classList.add('visible');
+    });
+});
+</script>
+
+
+
+<footer class="site-footer">
+<div class="wrap">© CNET-F25 — Sezerano Beni — 28852</div>
+</footer>
+
+</body>
+</html>
